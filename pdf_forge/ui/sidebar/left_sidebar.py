@@ -55,6 +55,7 @@ class LeftSidebar(QWidget):
             ("compress_pdf",  "Compress PDF"),
             ("linearize_pdf", "Linearize (Web)"),
             ("sanitize_pdf",  "Sanitize PDF"),
+            ("repair_pdf",    "Repair PDF"),
         ]),
     ]
 

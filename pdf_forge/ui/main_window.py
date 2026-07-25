@@ -549,6 +549,7 @@ class MainWindow(QMainWindow):
             # M4 — Organize/Secure
             "linearize_pdf": self._run_linearize,
             "sanitize_pdf":  self._run_sanitize,
+            "repair_pdf":    self._run_repair,
         }
         fn = dispatch.get(tool_id)
         if fn:
@@ -1185,7 +1186,7 @@ class MainWindow(QMainWindow):
         if not out:
             return
         p = dlg.get_params()
-        tool = registry.get("redact_pdf")
+        tool = registry.get("redact")
         self._job_queue.submit(tool.create_job({
             "input_path":   input_path,
             "output_path":  out,
@@ -1449,6 +1450,19 @@ class MainWindow(QMainWindow):
         params.update({"input_path": input_path, "output_path": out})
         tool = registry.get("decrypt_pdf")
         self._job_queue.submit(tool.create_job(params))
+
+    def _run_repair(self) -> None:
+        input_path = self._require_open("Repair PDF")
+        if not input_path:
+            return
+        out = self._save_as("Save Repaired PDF", input_path, "_repaired")
+        if not out:
+            return
+        tool = registry.get("repair_pdf")
+        self._job_queue.submit(tool.create_job({
+            "input_path": input_path,
+            "output_path": out,
+        }))
 
     # ── Settings ──────────────────────────────────────────────────────────────
 

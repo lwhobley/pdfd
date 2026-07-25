@@ -148,7 +148,7 @@ _SPECS: list[NodeSpec] = [
         color="#2a2a3e",
     ),
     NodeSpec(
-        node_type="redact_pdf",
+        node_type="redact",
         title="Redact",
         category="Edit",
         inputs=[_pdf_in],

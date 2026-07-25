@@ -30,7 +30,7 @@ class RedactJob(Job):
         whole_word: bool = False,
         case_sensitive: bool = False,
     ) -> None:
-        super().__init__("redact_pdf", [input_path])
+        super().__init__("redact", [input_path])
         self.output_path = output_path
         self.search_terms = search_terms
         self.fill_color = fill_color
@@ -73,7 +73,7 @@ class RedactJob(Job):
 
 class RedactTool(BaseTool):
     meta = ToolMeta(
-        tool_id="redact_pdf",
+        tool_id="redact",
         name="Redact Content",
         description="Search for text and permanently remove it with black rectangles.",
         category="edit",
