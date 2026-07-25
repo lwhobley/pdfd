@@ -26,6 +26,12 @@ def run() -> int:
     app.setOrganizationName(ORG_NAME)
     app.setApplicationVersion(__version__)
 
+    # App icon — works both in dev and frozen (PyInstaller) mode
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)) + "/..")
+    icon_path = os.path.join(base, "pdf_forge", "assets", "icons", "app.ico")
+    if os.path.isfile(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
+
     settings = AppSettings()
     apply_theme(app, settings.theme)
 

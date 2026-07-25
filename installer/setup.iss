@@ -27,6 +27,8 @@ WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.10240
+SetupIconFile=..\pdf_forge\assets\icons\app.ico
+UninstallDisplayIcon={app}\{#MyAppExeName}
 DisableWelcomePage=no
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
@@ -48,7 +50,8 @@ Source: "{#MyDistDir}\*"; \
 [Icons]
 Name: "{group}\{#MyAppName}"; \
   Filename: "{app}\{#MyAppExeName}"; \
-  WorkingDir: "{app}"
+  WorkingDir: "{app}"; \
+  IconFilename: "{app}\{#MyAppExeName}"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; \
   Filename: "{uninstallexe}"
 Name: "{commondesktop}\{#MyAppName}"; \

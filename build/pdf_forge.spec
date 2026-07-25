@@ -104,8 +104,7 @@ exe = EXE(
     entitlements_file=None,
     # Windows version resource (shows in Properties → Details tab)
     version="version_info.txt",
-    # Uncomment and set path when an .ico is available:
-    # icon="../pdf_forge/assets/icons/app.ico",
+    icon="../pdf_forge/assets/icons/app.ico",
 )
 
 coll = COLLECT(
