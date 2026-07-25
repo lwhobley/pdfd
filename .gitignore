@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+*.egg
+dist/
+build/pdf_forge/
+*.spec.bak
+
+# Virtual environment
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# PyInstaller work dir (lives outside repo, but just in case)
+*.manifest
+*.log
+
+# App data
+*.pdf
+!tests/fixtures/*.pdf

@@ -1,0 +1,28 @@
+# Core PDF engine
+PyMuPDF>=1.24.0
+pikepdf>=8.0.0
+
+# UI
+PySide6>=6.6.0
+
+# Image processing
+Pillow>=10.0.0
+opencv-python-headless>=4.8.0
+
+# PDF generation / editing
+reportlab>=4.0.0
+
+# Office document reading (for conversion)
+python-docx>=1.0.0
+openpyxl>=3.1.0
+
+# OCR (optional; gracefully degraded if tesseract binary absent)
+pytesseract>=0.3.10
+
+# Digital signatures (optional — gracefully fails with clear message if absent)
+pyhanko>=0.21.0
+pyhanko-certvalidator>=0.26.0
+
+# Utilities
+pdfplumber>=0.10.0
+chardet>=5.0.0
