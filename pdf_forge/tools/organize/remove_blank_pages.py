@@ -2,6 +2,8 @@
 from __future__ import annotations
 from typing import Any
 
+import fitz
+
 from pdf_forge.tools.base import BaseTool, ToolMeta
 from pdf_forge.workers.job_model import Job, JobResult
 from pdf_forge.adapters.pikepdf_adapter import PikePDFAdapter
@@ -38,3 +40,23 @@ class RemoveBlankPagesTool(BaseTool):
             input_path=params["input_path"],
             output_path=params["output_path"],
         )
+
+    def apply_to_doc(self, doc: fitz.Document, params: dict[str, Any]) -> fitz.Document:
+        """Detect and remove blank pages in-place."""
+        removed = 0
+        indices_to_delete = []
+
+        for i in range(len(doc)):
+            page = doc[i]
+            # A page is blank if it has no text and no images
+            text = page.get_text().strip()
+            images = page.get_images()
+            if not text and not images:
+                indices_to_delete.append(i)
+                removed += 1
+
+        # Delete in reverse order to preserve indices
+        for idx in sorted(indices_to_delete, reverse=True):
+            doc.delete_page(idx)
+
+        return doc

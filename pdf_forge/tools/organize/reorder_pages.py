@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import Any
 
+import fitz
 import pikepdf
 
 from pdf_forge.tools.base import BaseTool, ToolMeta
@@ -54,3 +55,13 @@ class ReorderPagesTool(BaseTool):
             output_path=params["output_path"],
             page_order=params["page_order"],
         )
+
+    def apply_to_doc(self, doc: fitz.Document, params: dict[str, Any]) -> fitz.Document:
+        """Reorder pages according to the provided order in-place."""
+        page_order = params["page_order"]
+        # Move pages to match the desired order
+        # We need to process from back to front to avoid index shifting
+        for new_idx, old_idx in enumerate(page_order):
+            if old_idx != new_idx and old_idx < len(doc):
+                doc.move_page(old_idx, new_idx)
+        return doc

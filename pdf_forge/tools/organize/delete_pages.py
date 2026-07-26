@@ -2,6 +2,8 @@
 from __future__ import annotations
 from typing import Any
 
+import fitz
+
 from pdf_forge.tools.base import BaseTool, ToolMeta
 from pdf_forge.workers.job_model import Job, JobResult
 from pdf_forge.adapters.pikepdf_adapter import PikePDFAdapter
@@ -42,3 +44,11 @@ class DeletePagesTool(BaseTool):
             output_path=params["output_path"],
             page_indices=params["page_indices"],
         )
+
+    def apply_to_doc(self, doc: fitz.Document, params: dict[str, Any]) -> fitz.Document:
+        """Delete pages by index in-place."""
+        page_indices = sorted(params["page_indices"], reverse=True)
+        for idx in page_indices:
+            if 0 <= idx < len(doc):
+                doc.delete_page(idx)
+        return doc

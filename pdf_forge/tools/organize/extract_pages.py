@@ -2,6 +2,8 @@
 from __future__ import annotations
 from typing import Any
 
+import fitz
+
 from pdf_forge.tools.base import BaseTool, ToolMeta
 from pdf_forge.workers.job_model import Job, JobResult
 from pdf_forge.adapters.pikepdf_adapter import PikePDFAdapter
@@ -42,3 +44,12 @@ class ExtractPagesTool(BaseTool):
             output_path=params["output_path"],
             page_indices=params["page_indices"],
         )
+
+    def apply_to_doc(self, doc: fitz.Document, params: dict[str, Any]) -> fitz.Document:
+        """Extract pages: keep only the specified pages in-place."""
+        page_indices = set(params["page_indices"])
+        # Delete pages not in the extract list, in reverse order
+        for idx in range(len(doc) - 1, -1, -1):
+            if idx not in page_indices:
+                doc.delete_page(idx)
+        return doc

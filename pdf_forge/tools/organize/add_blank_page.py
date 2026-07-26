@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import Any
 
+import fitz
 import pikepdf
 from pikepdf import Pdf, Page, Dictionary, Name, Array
 
@@ -63,3 +64,16 @@ class AddBlankPageTool(BaseTool):
             width_pt=params.get("width_pt", 595.0),
             height_pt=params.get("height_pt", 842.0),
         )
+
+    def apply_to_doc(self, doc: fitz.Document, params: dict[str, Any]) -> fitz.Document:
+        """Add a blank page at the given position in-place."""
+        position = params.get("position", -1)
+        width_pt = params.get("width_pt", 595.0)
+        height_pt = params.get("height_pt", 842.0)
+
+        rect = fitz.Rect(0, 0, width_pt, height_pt)
+        if position < 0 or position >= len(doc):
+            doc.new_page(-1, width=width_pt, height=height_pt)
+        else:
+            doc.new_page(position, width=width_pt, height=height_pt)
+        return doc

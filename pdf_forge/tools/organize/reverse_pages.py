@@ -2,6 +2,7 @@
 from __future__ import annotations
 from typing import Any
 
+import fitz
 import pikepdf
 
 from pdf_forge.tools.base import BaseTool, ToolMeta
@@ -40,3 +41,10 @@ class ReversePagesTool(BaseTool):
             input_path=params["input_path"],
             output_path=params["output_path"],
         )
+
+    def apply_to_doc(self, doc: fitz.Document, params: dict[str, Any]) -> fitz.Document:
+        """Reverse page order in-place."""
+        page_count = len(doc)
+        for i in range(page_count // 2):
+            doc.move_page(i, page_count - 1 - i)
+        return doc
