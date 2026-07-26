@@ -271,6 +271,12 @@ class MainWindow(QMainWindow):
         self._act_redo.triggered.connect(self._redo)
         self._act_redo.setEnabled(False)
 
+        edit_menu.addSeparator()
+        self._act_text_edit = edit_menu.addAction("Edit Text in Place")
+        self._act_text_edit.setCheckable(True)
+        self._act_text_edit.setShortcut(QKeySequence("Ctrl+Shift+E"))
+        self._act_text_edit.toggled.connect(self._set_text_edit_mode)
+
         # Tools menu
         tools_menu = mb.addMenu("&Tools")
 
@@ -408,6 +414,8 @@ class MainWindow(QMainWindow):
         act_open.triggered.connect(self._browse_open)
         tb.addAction(act_open)
 
+        tb.addAction(self._act_text_edit)
+
         tb.addSeparator()
 
         # Page navigation
@@ -477,6 +485,9 @@ class MainWindow(QMainWindow):
         tab = DocumentTab(handle)
         tab.viewer.page_changed.connect(self._on_viewer_page_changed)
         tab.viewer.zoom_changed.connect(self._on_viewer_zoom_changed)
+        tab.viewer.text_edit_committed.connect(
+            lambda edit, t=tab: self._commit_inline_text_edit(t, edit)
+        )
 
         idx = self._tab_widget.addTab(tab, handle.title)
         self._tab_widget.setCurrentIndex(idx)
@@ -1035,6 +1046,58 @@ class MainWindow(QMainWindow):
         }))
 
     # ── Viewer Controls ───────────────────────────────────────────────────────
+
+    def _set_text_edit_mode(self, enabled: bool) -> None:
+        """Toggle click-to-edit text for the current viewer."""
+        tab = self._current_tab()
+        if not tab:
+            if enabled:
+                self._act_text_edit.setChecked(False)
+            return
+        tab.viewer.set_text_edit_mode(enabled)
+        if enabled:
+            self._status_bar.showMessage(
+                "Text edit mode: click a line to edit, click blank space to add text; Esc cancels."
+            )
+        else:
+            self._status_bar.showMessage("Text edit mode off")
+
+    def _commit_inline_text_edit(self, tab: "DocumentTab", edit: dict) -> None:
+        """Apply an inline text edit as a snapshot-backed in-place operation."""
+        if tab is not self._current_tab():
+            return
+        doc = tab.viewer.current_doc()
+        page_num = edit.get("page_num")
+        if not doc or not isinstance(page_num, int) or not (0 <= page_num < doc.page_count):
+            return
+
+        original = edit.get("original_text", "")
+        replacement = edit.get("text", "")
+        if replacement == original:
+            return
+
+        rect = fitz.Rect(edit["rect"])
+        before_bytes = doc.tobytes()
+        page = doc[page_num]
+        if original:
+            page.add_redact_annot(rect, fill=(1.0, 1.0, 1.0))
+            page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
+        if replacement:
+            page.insert_text(
+                fitz.Point(rect.x0, rect.y1 - 1), replacement,
+                fontsize=float(edit.get("font_size", 12.0)),
+                color=tuple(edit.get("color", (0.0, 0.0, 0.0))),
+            )
+
+        from pdf_forge.ui.undo_stack import SnapshotCommand
+        description = "Delete Text" if original and not replacement else "Edit Text"
+        if not original:
+            description = "Add Text"
+        tab._undo_stack.push(SnapshotCommand(description, before_bytes), before_bytes)
+        tab.viewer.reload_from_memory()
+        self._mark_dirty()
+        self._update_undo_redo_buttons()
+        self._status_bar.showMessage(f"{description}: saved in memory")
 
     def _zoom_in(self) -> None:
         tab = self._current_tab()
