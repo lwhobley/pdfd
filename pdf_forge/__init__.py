@@ -1,5 +1,5 @@
-"""PDFDADDY — production-grade PDF workstation."""
+"""PDF'D — production-grade PDF workstation."""
 from pdf_forge.version import VERSION_STR as __version__
 
-APP_NAME = "PDFDADDY"
-ORG_NAME = "PDFDADDY"
+APP_NAME = "PDF'D"
+ORG_NAME = "PDFD"

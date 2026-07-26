@@ -24,7 +24,7 @@ class HistoryEntry:
 
 class JobHistory:
     def __init__(self) -> None:
-        base = Path(os.environ.get("APPDATA", Path.home())) / "PDFDADDY"
+        base = Path(os.environ.get("APPDATA", Path.home())) / "PDFD"
         base.mkdir(parents=True, exist_ok=True)
         self._path = base / "job_history.json"
         self._entries: list[HistoryEntry] = self._load()

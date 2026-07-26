@@ -1,4 +1,4 @@
-"""PDFDADDY — main window."""
+"""PDF'D — main window."""
 from __future__ import annotations
 import logging
 import os
@@ -373,7 +373,7 @@ class MainWindow(QMainWindow):
 
         # Help menu
         help_menu = mb.addMenu("&Help")
-        act_about = help_menu.addAction("About PDFDADDY")
+        act_about = help_menu.addAction("About PDF'D")
         act_about.triggered.connect(self._show_about)
 
     def _build_toolbar(self) -> None:
@@ -1472,8 +1472,8 @@ class MainWindow(QMainWindow):
 
     def _show_about(self) -> None:
         QMessageBox.about(
-            self, "About PDFDADDY",
-            f"PDFDADDY v{__version__}\n\n"
+            self, "About PDF'D",
+            f"PDF'D v{__version__}\n\n"
             "A production-grade PDF workstation.\n\n"
             "Built with Python + PySide6 + PyMuPDF + pikepdf."
         )
@@ -1482,14 +1482,14 @@ class MainWindow(QMainWindow):
 
     def _restore_geometry(self) -> None:
         from PySide6.QtCore import QSettings
-        qs = QSettings("PDFDADDY", "PDFDADDY")
+        qs = QSettings("PDFD", "PDFD")
         geom = qs.value("MainWindow/geometry")
         if geom:
             self.restoreGeometry(geom)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         from PySide6.QtCore import QSettings
-        qs = QSettings("PDFDADDY", "PDFDADDY")
+        qs = QSettings("PDFD", "PDFD")
         qs.setValue("MainWindow/geometry", self.saveGeometry())
         self._job_queue.shutdown()
         self._pdf_service.close_all()

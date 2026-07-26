@@ -14,13 +14,13 @@ VSVersionInfo(
       [
         StringTable(
           u'040904B0',
-          [StringStruct(u'CompanyName', u'PDFDADDY'),
-           StringStruct(u'FileDescription', u'PDFDADDY - Professional PDF Workstation'),
+          [StringStruct(u'CompanyName', u"PDF'D"),
+           StringStruct(u'FileDescription', u"PDF'D - Professional PDF Workstation"),
            StringStruct(u'FileVersion', u'0.1.0.0'),
-           StringStruct(u'InternalName', u'pdfdaddy'),
-           StringStruct(u'LegalCopyright', u'Copyright 2025 PDFDADDY'),
-           StringStruct(u'OriginalFilename', u'PDFDADDY.exe'),
-           StringStruct(u'ProductName', u'PDFDADDY'),
+           StringStruct(u'InternalName', u'pdfd'),
+           StringStruct(u'LegalCopyright', u"Copyright 2025 PDF'D"),
+           StringStruct(u'OriginalFilename', u'PDFD.exe'),
+           StringStruct(u'ProductName', u"PDF'D"),
            StringStruct(u'ProductVersion', u'0.1.0.0')])
       ]
     ),

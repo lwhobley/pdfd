@@ -9,7 +9,7 @@ MAX_RECENT = 20
 
 class RecentFiles:
     def __init__(self) -> None:
-        self._qs = QSettings("PDFDADDY", "PDFDADDY")
+        self._qs = QSettings("PDFD", "PDFD")
         self._key = "RecentFiles/paths"
 
     def paths(self) -> list[str]:

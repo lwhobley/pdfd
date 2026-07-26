@@ -1,4 +1,4 @@
-# build_windows.ps1 - Build PDFDADDY for Windows
+# build_windows.ps1 - Build PDF'D for Windows
 #
 # Usage (from project root):
 #   .\build\build_windows.ps1
@@ -13,10 +13,10 @@ $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
 $version = "0.1.0"
-$distDir = "$root\dist\PDFDADDY"
+$distDir = "$root\dist\PDFD"
 # Keep PyInstaller scratch out of build\ (which holds the spec) and out of
 # OneDrive, whose sync locks files and makes --clean fail with WinError 5.
-$workDir = "$env:LOCALAPPDATA\PDFDADDY-build"
+$workDir = "$env:LOCALAPPDATA\PDFD-build"
 
 function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Write-Ok($msg)   { Write-Host "    $msg" -ForegroundColor Green }
@@ -45,7 +45,7 @@ if (-not (Test-Path $distDir)) {
     exit 1
 }
 
-$exePath = "$distDir\PDFDADDY.exe"
+$exePath = "$distDir\PDFD.exe"
 if (-not (Test-Path $exePath)) {
     Write-Host "==> BUILD FAILED - exe not found at $exePath" -ForegroundColor Red
     exit 1
@@ -80,7 +80,7 @@ foreach ($candidate in $isccCandidates) {
 if ($iscc) {
     Write-Step "Compiling installer with Inno Setup..."
     & $iscc "installer\setup.iss"
-    $setupExe = "$root\dist\PDFDADDY-$version-win64-setup.exe"
+    $setupExe = "$root\dist\PDFD-$version-win64-setup.exe"
     if (Test-Path $setupExe) {
         $setupMB = [math]::Round((Get-Item $setupExe).Length / 1MB, 1)
         Write-Ok "Installer: $setupExe ($setupMB MB)"

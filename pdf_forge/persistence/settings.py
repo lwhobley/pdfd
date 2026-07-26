@@ -9,7 +9,7 @@ class AppSettings:
     _GROUP_PATHS = "Paths"
 
     def __init__(self) -> None:
-        self._qs = QSettings("PDFDADDY", "PDFDADDY")
+        self._qs = QSettings("PDFD", "PDFD")
 
     # ── General ───────────────────────────────────────────────────────────────
 

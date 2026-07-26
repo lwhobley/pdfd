@@ -1,11 +1,11 @@
-; Inno Setup 6 script - PDFDADDY
+; Inno Setup 6 script - PDF'D
 ; Compile with: iscc installer\setup.iss
 
-#define MyAppName      "PDFDADDY"
+#define MyAppName      "PDF'D"
 #define MyAppVersion   "0.1.0"
-#define MyAppPublisher "PDFDADDY"
-#define MyAppExeName   "PDFDADDY.exe"
-#define MyDistDir      "..\dist\PDFDADDY"
+#define MyAppPublisher "PDF'D"
+#define MyAppExeName   "PDFD.exe"
+#define MyDistDir      "..\dist\PDFD"
 
 [Setup]
 AppId={{7F4B2E3A-1C6D-4A8F-9E2B-3D5C7A0F1B4E}
@@ -13,14 +13,14 @@ AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-AppPublisherURL=https://github.com/pdfdaddy
-AppSupportURL=https://github.com/pdfdaddy/issues
-AppUpdatesURL=https://github.com/pdfdaddy/releases
+AppPublisherURL=https://github.com/pdfd
+AppSupportURL=https://github.com/pdfd/issues
+AppUpdatesURL=https://github.com/pdfd/releases
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 OutputDir=..\dist
-OutputBaseFilename=PDFDADDY-{#MyAppVersion}-win64-setup
+OutputBaseFilename=PDFD-{#MyAppVersion}-win64-setup
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -67,4 +67,4 @@ Filename: "{app}\{#MyAppExeName}"; \
 [UninstallDelete]
 Type: registry; \
   Root: HKCU; \
-  Subkey: "Software\PDFDADDY\PDFDADDY"
+  Subkey: "Software\PDFD\PDFD"

@@ -1,4 +1,4 @@
-# PDF Forge Desktop
+# PDF'D
 
 A production-grade Windows desktop PDF workstation built with Python + PySide6 + PyMuPDF + pikepdf.
 
@@ -26,7 +26,7 @@ pytest tests/ -v
 
 ```powershell
 .\build\build_windows.ps1
-# Output: dist\PDFForgeDesktop\PDFForgeDesktop.exe
+# Output: dist\PDFD\PDFD.exe
 ```
 
 Or manually:
@@ -47,15 +47,6 @@ pdf_forge/
 ├── adapters/     # PyMuPDF, pikepdf, Tesseract wrappers
 └── persistence/  # Settings, recent files, job history
 ```
-
-## Milestone Progress
-
-- [x] M0: Bootstrap — project skeleton, job system, tool registry, settings
-- [x] M1: Viewer + core tools — open/view/thumbnails, merge/split/rotate/delete/extract
-- [ ] M2: Page organizer — drag-and-drop grid, batch ops, bookmarks
-- [ ] M3: Edit + OCR — annotations, watermark, page numbers, OCR
-- [ ] M4: Convert + Secure — Office→PDF, encrypt/decrypt, sign
-- [ ] M5: Workflow builder — visual node editor
 
 ## External Tools (Optional)
 

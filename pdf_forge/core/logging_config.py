@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 def _log_dir() -> Path:
-    base = Path(os.environ.get("APPDATA", Path.home())) / "PDFDADDY" / "logs"
+    base = Path(os.environ.get("APPDATA", Path.home())) / "PDFD" / "logs"
     base.mkdir(parents=True, exist_ok=True)
     return base
 
@@ -21,7 +21,7 @@ def setup_logging(level: int = logging.DEBUG) -> None:
     )
 
     # Rotating file handler — keeps last 5 × 2 MB
-    log_file = _log_dir() / "pdfdaddy.log"
+    log_file = _log_dir() / "pdfd.log"
     fh = logging.handlers.RotatingFileHandler(
         log_file, maxBytes=2 * 1024 * 1024, backupCount=5, encoding="utf-8"
     )
