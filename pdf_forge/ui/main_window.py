@@ -1083,11 +1083,51 @@ class MainWindow(QMainWindow):
             page.add_redact_annot(rect, fill=(1.0, 1.0, 1.0))
             page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
         if replacement:
-            page.insert_text(
-                fitz.Point(rect.x0, rect.y1 - 1), replacement,
-                fontsize=float(edit.get("font_size", 12.0)),
-                color=tuple(edit.get("color", (0.0, 0.0, 0.0))),
+            family = edit.get("font_family", "Helvetica")
+            font_names = {
+                "Helvetica": (
+                    "Helvetica", "Helvetica-Bold", "Helvetica-Oblique", "Helvetica-BoldOblique"
+                ),
+                "Times": (
+                    "Times-Roman", "Times-Bold", "Times-Italic", "Times-BoldItalic"
+                ),
+                "Courier": (
+                    "Courier", "Courier-Bold", "Courier-Oblique", "Courier-BoldOblique"
+                ),
+            }
+            variants = font_names.get(family, font_names["Helvetica"])
+            variant = (1 if edit.get("bold", False) else 0) + (
+                2 if edit.get("italic", False) else 0
             )
+            font_name = variants[variant]
+            font_file = edit.get("font_file")
+            if font_file and os.path.isfile(font_file):
+                # Use a unique PDF resource name so selected system fonts are
+                # embedded instead of silently falling back to Helvetica.
+                font_name = f"InlineFont{doc.xref_length()}"
+            font_size = float(edit.get("font_size", 12.0))
+            color = tuple(edit.get("color", (0.0, 0.0, 0.0)))
+            baseline = fitz.Point(rect.x0, rect.y1 - 1)
+            page.insert_text(
+                baseline, replacement, fontname=font_name,
+                fontfile=font_file if font_file and os.path.isfile(font_file) else None,
+                fontsize=font_size, color=color,
+                fill=color if edit.get("bold", False) and font_file else None,
+                render_mode=2 if edit.get("bold", False) and font_file else 0,
+                border_width=max(0.05, font_size * 0.035) if edit.get("bold", False) and font_file else 0.05,
+            )
+            if edit.get("underline", False):
+                if font_file and os.path.isfile(font_file):
+                    text_width = fitz.Font(fontfile=font_file).text_length(replacement, fontsize=font_size)
+                else:
+                    text_width = fitz.get_text_length(
+                        replacement, fontname=font_name, fontsize=font_size
+                    )
+                page.draw_line(
+                    fitz.Point(rect.x0, baseline.y + max(1, font_size * 0.08)),
+                    fitz.Point(rect.x0 + text_width, baseline.y + max(1, font_size * 0.08)),
+                    color=color, width=max(0.5, font_size * 0.05),
+                )
 
         from pdf_forge.ui.undo_stack import SnapshotCommand
         description = "Delete Text" if original and not replacement else "Edit Text"

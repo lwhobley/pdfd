@@ -1,12 +1,14 @@
 """PDF page viewer — scrollable single-page view with zoom and navigation."""
 from __future__ import annotations
 import logging
+import os
 from PySide6.QtWidgets import (
     QWidget, QScrollArea, QLabel, QVBoxLayout, QHBoxLayout,
-    QSizePolicy, QFrame, QLineEdit,
+    QSizePolicy, QFrame, QLineEdit, QComboBox, QSpinBox, QToolButton,
+    QColorDialog,
 )
 from PySide6.QtCore import Qt, Signal, QThreadPool, QSize, QPoint, QRect
-from PySide6.QtGui import QPixmap, QWheelEvent, QKeyEvent, QFont
+from PySide6.QtGui import QPixmap, QWheelEvent, QKeyEvent, QFont, QColor
 
 from pdf_forge.adapters.pymupdf_adapter import PyMuPDFAdapter
 from pdf_forge.ui.viewer.page_renderer import PageRenderTask
@@ -16,6 +18,33 @@ log = logging.getLogger(__name__)
 MIN_ZOOM = 0.2
 MAX_ZOOM = 5.0
 ZOOM_STEP = 0.15
+
+
+def _installed_font_files() -> dict[str, str]:
+    """Return Windows-installed font faces and their embeddable font files."""
+    fonts: dict[str, str] = {}
+    if os.name != "nt":
+        return fonts
+    try:
+        import winreg
+        key_path = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path) as key:
+            index = 0
+            while True:
+                try:
+                    name, filename, _ = winreg.EnumValue(key, index)
+                except OSError:
+                    break
+                index += 1
+                if not isinstance(filename, str) or not filename.lower().endswith((".ttf", ".otf")):
+                    continue
+                path = filename if os.path.isabs(filename) else os.path.join(r"C:\Windows\Fonts", filename)
+                label = name.replace("(TrueType)", "").strip()
+                if label and not label.startswith("@") and os.path.isfile(path):
+                    fonts[label] = path
+    except OSError:
+        log.warning("Could not enumerate installed Windows fonts")
+    return fonts
 
 
 class PageLabel(QLabel):
@@ -89,7 +118,9 @@ class PDFViewer(QWidget):
         self._pending_render: int = -1
         self._text_edit_mode = False
         self._inline_editor: InlineTextEditor | None = None
+        self._format_bar: QWidget | None = None
         self._editing_text: dict | None = None
+        self._installed_fonts = _installed_font_files()
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -268,6 +299,10 @@ class PDFViewer(QWidget):
                 "original_text": "",
                 "font_size": 12.0,
                 "color": (0.0, 0.0, 0.0),
+                "font_family": "Helvetica",
+                "bold": False,
+                "italic": False,
+                "underline": False,
             }
 
         rect = target["rect"]
@@ -278,10 +313,12 @@ class PDFViewer(QWidget):
         editor = InlineTextEditor(self._page_label)
         editor.setGeometry(QRect(left, top, width, height))
         editor.setText(target["original_text"])
-        font = QFont()
-        font.setPointSizeF(max(8.0, target["font_size"] * self._zoom))
-        editor.setFont(font)
-        editor.setStyleSheet("background: white; color: black; border: 2px solid #3b82f6;")
+        self._set_editor_font(editor, target)
+        red, green, blue = target["color"]
+        editor.setStyleSheet(
+            "background: white; border: 2px solid #3b82f6; "
+            f"color: rgb({round(red * 255)}, {round(green * 255)}, {round(blue * 255)});"
+        )
         editor.accepted.connect(self._commit_inline_text)
         editor.cancelled.connect(self._close_inline_editor)
         editor.show()
@@ -289,6 +326,78 @@ class PDFViewer(QWidget):
         editor.selectAll()
         self._inline_editor = editor
         self._editing_text = target
+        self._create_format_bar(left, top, target)
+
+    def _set_editor_font(self, editor: InlineTextEditor, target: dict) -> None:
+        """Match the overlay to the page pixel scale without enlarging its text."""
+        font = QFont(target.get("font_family", "Helvetica"))
+        font.setPixelSize(max(8, round(float(target.get("font_size", 12.0)) * self._zoom)))
+        font.setBold(target.get("bold", False))
+        font.setItalic(target.get("italic", False))
+        font.setUnderline(target.get("underline", False))
+        editor.setFont(font)
+
+    def _create_format_bar(self, left: int, top: int, target: dict) -> None:
+        bar = QWidget(self._page_label)
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(2)
+        bar.setStyleSheet("background: #f8fafc; border: 1px solid #94a3b8;")
+
+        family = QComboBox(bar)
+        family.addItems(["Helvetica", "Times", "Courier"] + sorted(self._installed_fonts))
+        family.setCurrentText(target.get("font_family", "Helvetica"))
+        family.currentTextChanged.connect(self._set_font_family)
+        layout.addWidget(family)
+
+        size = QSpinBox(bar)
+        size.setRange(6, 144)
+        size.setValue(round(float(target.get("font_size", 12.0))))
+        size.valueChanged.connect(lambda value: self._set_format("font_size", float(value)))
+        layout.addWidget(size)
+
+        for label, key in (("B", "bold"), ("I", "italic"), ("U", "underline")):
+            button = QToolButton(bar)
+            button.setText(label)
+            button.setCheckable(True)
+            button.setChecked(target.get(key, False))
+            button.setToolTip(key.capitalize())
+            button.toggled.connect(lambda checked, name=key: self._set_format(name, checked))
+            layout.addWidget(button)
+
+        color_button = QToolButton(bar)
+        color_button.setText("A")
+        color_button.setToolTip("Text color")
+        color_button.clicked.connect(self._choose_text_color)
+        layout.addWidget(color_button)
+        bar.adjustSize()
+        bar.move(left, max(0, top - bar.height() - 4))
+        bar.show()
+        self._format_bar = bar
+
+    def _set_format(self, key: str, value) -> None:
+        if not self._editing_text or not self._inline_editor:
+            return
+        self._editing_text[key] = value
+        self._set_editor_font(self._inline_editor, self._editing_text)
+
+    def _set_font_family(self, family: str) -> None:
+        self._set_format("font_family", family)
+        if self._editing_text is not None:
+            self._editing_text["font_file"] = self._installed_fonts.get(family)
+
+    def _choose_text_color(self) -> None:
+        if not self._editing_text:
+            return
+        red, green, blue = self._editing_text.get("color", (0.0, 0.0, 0.0))
+        color = QColorDialog.getColor(QColor.fromRgbF(red, green, blue), self)
+        if color.isValid():
+            self._editing_text["color"] = (color.redF(), color.greenF(), color.blueF())
+            if self._inline_editor:
+                self._inline_editor.setStyleSheet(
+                    "background: white; border: 2px solid #3b82f6; "
+                    f"color: rgb({color.red()}, {color.green()}, {color.blue()});"
+                )
 
     def _find_text_line(self, page, x: float, y: float) -> dict | None:
         """Find the nearest extracted text line under the pointer."""
@@ -306,11 +415,20 @@ class PDFViewer(QWidget):
                 if closest is None or distance < closest[0]:
                     span = spans[0]
                     packed_color = span.get("color", 0)
+                    font_name = span.get("font", "Helvetica").lower()
+                    font_family = "Courier" if "cour" in font_name else (
+                        "Times" if "times" in font_name else "Helvetica"
+                    )
                     closest = (distance, {
                         "page_num": self._current_page,
                         "rect": tuple(rect),
                         "original_text": text,
                         "font_size": span.get("size", 12.0),
+                        "font_family": font_family,
+                        "font_file": None,
+                        "bold": "bold" in font_name,
+                        "italic": "italic" in font_name or "oblique" in font_name,
+                        "underline": False,
                         "color": (
                             ((packed_color >> 16) & 255) / 255,
                             ((packed_color >> 8) & 255) / 255,
@@ -329,7 +447,10 @@ class PDFViewer(QWidget):
     def _close_inline_editor(self) -> None:
         if self._inline_editor:
             self._inline_editor.deleteLater()
+        if self._format_bar:
+            self._format_bar.deleteLater()
         self._inline_editor = None
+        self._format_bar = None
         self._editing_text = None
 
     def _on_render_error(self, page_num: int, error: str) -> None:
