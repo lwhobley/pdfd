@@ -2,6 +2,7 @@
 from __future__ import annotations
 import logging
 import os
+import fitz
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QSplitter,
     QTabWidget, QFileDialog, QMessageBox, QLabel, QStatusBar,
@@ -682,9 +683,10 @@ class MainWindow(QMainWindow):
         deg_map = {"90° clockwise": 90, "180°": 180, "90° counter-clockwise": 270}
         degrees = deg_map[combo_deg.currentText()]
 
-        # Save current state for undo
-        import copy
-        before_state = copy.deepcopy(doc)
+        # Save current state for undo. fitz.Document wraps a SWIG/C object and
+        # cannot be copy.deepcopy()'d (TypeError: cannot pickle SwigPyObject),
+        # so snapshot it by serializing to bytes and reopening independently.
+        before_state = fitz.open(stream=doc.tobytes(), filetype="pdf")
 
         # Apply rotation to in-memory doc
         tool = registry.get("rotate_pages")
