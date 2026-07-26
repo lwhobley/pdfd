@@ -74,6 +74,7 @@ class DocumentTab(QWidget):
     def __init__(self, handle: DocumentHandle, parent=None) -> None:
         super().__init__(parent)
         self.handle = handle
+        self._undo_stack = UndoStack()
 
         from PySide6.QtWidgets import QStackedWidget
         main_layout = QVBoxLayout(self)
@@ -141,7 +142,6 @@ class MainWindow(QMainWindow):
         self._history = JobHistory()
         self._pdf_service = PDFService(self._recent)
         self._job_queue = JobQueue(self._history, parent=self)
-        self._undo_stack = UndoStack()
         self._current_file_path: str | None = None
 
         Capabilities.detect(settings)
@@ -504,6 +504,19 @@ class MainWindow(QMainWindow):
 
     def _close_tab(self, index: int) -> None:
         tab: DocumentTab = self._tab_widget.widget(index)
+        if tab.viewer.is_dirty():
+            # Prompt to save before closing
+            reply = QMessageBox.question(
+                self, "Unsaved Changes",
+                f"Save changes to {self._tab_widget.tabText(index)} before closing?",
+                QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Save
+            )
+            if reply == QMessageBox.StandardButton.Cancel:
+                return
+            elif reply == QMessageBox.StandardButton.Save:
+                self._save()
+
         self._pdf_service.close(tab.handle.path)
         self._tab_widget.removeTab(index)
         if self._tab_widget.count() == 0:
@@ -511,6 +524,9 @@ class MainWindow(QMainWindow):
             self._drop_zone.show()
             self._right_sidebar.clear()
             self._update_page_controls(None)
+            self._update_undo_redo_buttons()
+        else:
+            self._update_undo_redo_buttons()
 
     def _close_current_tab(self) -> None:
         idx = self._tab_widget.currentIndex()
@@ -684,7 +700,9 @@ class MainWindow(QMainWindow):
             def description(self):
                 return f"Rotate {degrees}°"
 
-        self._undo_stack.push(RotateCommand(), before_state)
+        tab = self._current_tab()
+        if tab and hasattr(tab, '_undo_stack'):
+            tab._undo_stack.push(RotateCommand(), before_state)
         self._viewer.reload_from_memory()
         self._mark_dirty()
         self._update_undo_redo_buttons()
@@ -1061,11 +1079,17 @@ class MainWindow(QMainWindow):
         if not tab:
             return
         self._update_page_controls(tab)
+        self._update_undo_redo_buttons()
         self._right_sidebar.update_document_info(
             tab.handle.path,
             tab.handle.page_count,
             tab.handle.adapter.get_metadata() if tab.handle.adapter else {},
         )
+        # Update status bar with current tab info
+        status = f"Tab: {tab.handle.title}"
+        if tab.viewer.is_dirty():
+            status += " (modified)"
+        self._status_bar.showMessage(status)
 
     def _update_page_controls(self, tab: DocumentTab | None) -> None:
         if tab and tab.handle.page_count > 0:
@@ -1554,22 +1578,32 @@ class MainWindow(QMainWindow):
     # ── Undo/Redo/Save (In-Place Editing) ──────────────────────────────────────
 
     def _undo(self) -> None:
-        """Undo the last operation."""
-        result = self._undo_stack.undo()
+        """Undo the last operation in current tab."""
+        tab = self._current_tab()
+        if not tab or not hasattr(tab, '_undo_stack'):
+            self._status_bar.showMessage("Nothing to undo")
+            return
+
+        result = tab._undo_stack.undo()
         if result:
             cmd, before_state = result
             doc = self._viewer.current_doc()
             if doc:
-                # Swap the document back to before_state
-                # For now, just mark as dirty and refresh
                 self._viewer.set_dirty(True)
                 self._viewer.reload_from_memory()
                 self._status_bar.showMessage(f"Undone: {cmd.description()}")
                 self._update_undo_redo_buttons()
+        else:
+            self._status_bar.showMessage("Nothing to undo")
 
     def _redo(self) -> None:
-        """Redo the last undone operation."""
-        result = self._undo_stack.redo()
+        """Redo the last undone operation in current tab."""
+        tab = self._current_tab()
+        if not tab or not hasattr(tab, '_undo_stack'):
+            self._status_bar.showMessage("Nothing to redo")
+            return
+
+        result = tab._undo_stack.redo()
         if result:
             cmd, before_state = result
             doc = self._viewer.current_doc()
@@ -1578,6 +1612,8 @@ class MainWindow(QMainWindow):
                 self._viewer.reload_from_memory()
                 self._status_bar.showMessage(f"Redone: {cmd.description()}")
                 self._update_undo_redo_buttons()
+        else:
+            self._status_bar.showMessage("Nothing to redo")
 
     def _save(self) -> None:
         """Save the current document (in-place or save-as on first save)."""
@@ -1625,8 +1661,19 @@ class MainWindow(QMainWindow):
 
     def _update_undo_redo_buttons(self) -> None:
         """Enable/disable undo/redo buttons based on stack state."""
-        self._act_undo.setEnabled(self._undo_stack.can_undo())
-        self._act_redo.setEnabled(self._undo_stack.can_redo())
+        tab = self._current_tab()
+        if tab and hasattr(tab, '_undo_stack'):
+            self._act_undo.setEnabled(tab._undo_stack.can_undo())
+            self._act_redo.setEnabled(tab._undo_stack.can_redo())
+        else:
+            self._act_undo.setEnabled(False)
+            self._act_redo.setEnabled(False)
+
+    @property
+    def _viewer(self):
+        """Get the current tab's PDF viewer."""
+        tab = self._current_tab()
+        return tab.viewer if tab else None
 
     # ── Window Lifecycle ──────────────────────────────────────────────────────
 
@@ -1638,6 +1685,34 @@ class MainWindow(QMainWindow):
             self.restoreGeometry(geom)
 
     def closeEvent(self, event: QCloseEvent) -> None:
+        # Check for unsaved changes across all tabs
+        unsaved_tabs = []
+        for i in range(self._tab_widget.count()):
+            tab: DocumentTab = self._tab_widget.widget(i)
+            if tab.viewer.is_dirty():
+                unsaved_tabs.append(self._tab_widget.tabText(i))
+
+        if unsaved_tabs:
+            # Prompt user for unsaved changes
+            msg = "You have unsaved changes in:\n\n" + "\n".join(f"  • {t}" for t in unsaved_tabs)
+            msg += "\n\nDo you want to save before closing?"
+            reply = QMessageBox.question(
+                self, "Unsaved Changes", msg,
+                QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Cancel
+            )
+            if reply == QMessageBox.StandardButton.Cancel:
+                event.ignore()
+                return
+            elif reply == QMessageBox.StandardButton.Save:
+                # Try to save current document
+                if self._viewer:
+                    self._save()
+                    if self._viewer.is_dirty():
+                        # Save failed or user cancelled save-as
+                        event.ignore()
+                        return
+
         from PySide6.QtCore import QSettings
         qs = QSettings("PDFD", "PDFD")
         qs.setValue("MainWindow/geometry", self.saveGeometry())
