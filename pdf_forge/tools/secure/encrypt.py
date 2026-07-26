@@ -107,6 +107,7 @@ class EncryptTool(BaseTool):
         )
 
 
+
 class DecryptTool(BaseTool):
     meta = ToolMeta(
         tool_id="decrypt_pdf",
@@ -122,3 +123,4 @@ class DecryptTool(BaseTool):
             output_path=params["output_path"],
             password=params.get("password", ""),
         )
+
