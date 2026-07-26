@@ -64,10 +64,11 @@ class RepairTool(BaseTool):
 
     def apply_to_doc(self, doc: fitz.Document, params: dict[str, Any]) -> fitz.Document:
         """Repair via fitz page-by-page reconstruction in-place."""
-        # Create a new clean doc by copying pages from the original
-        dst = fitz.open()
+        rebuilt = fitz.open()
         for i in range(len(doc)):
-            dst.insert_pdf(doc, from_page=i, to_page=i)
-        # Close original and return the reconstructed doc
-        doc.close()
-        return dst
+            rebuilt.insert_pdf(doc, from_page=i, to_page=i)
+        if doc.page_count:
+            doc.delete_pages(0, doc.page_count - 1)
+        doc.insert_pdf(rebuilt)
+        rebuilt.close()
+        return doc

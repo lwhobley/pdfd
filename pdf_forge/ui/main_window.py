@@ -612,6 +612,27 @@ class MainWindow(QMainWindow):
             self._job_queue.submit(job)
             self._status_bar.showMessage(f"Split job submitted [{job.job_id}]")
 
+    def _apply_inplace_edit(self, tool_id: str, params: dict, description: str) -> bool:
+        """Apply an edit to the open document and record it for undo/redo."""
+        tab = self._current_tab()
+        doc = self._viewer.current_doc() if tab else None
+        if not tab or not doc:
+            return False
+
+        before_bytes = doc.tobytes()
+        modified = registry.get(tool_id).apply_to_doc(doc, params)
+        assert modified is doc, (
+            f"{tool_id}.apply_to_doc() returned a different document object; "
+            "in-place edits must mutate the open document."
+        )
+        from pdf_forge.ui.undo_stack import SnapshotCommand
+        tab._undo_stack.push(SnapshotCommand(description, before_bytes), before_bytes)
+        self._viewer.reload_from_memory()
+        self._mark_dirty()
+        self._update_undo_redo_buttons()
+        self._status_bar.showMessage(description)
+        return True
+
     def _run_rotate(self) -> None:
         doc = self._viewer.current_doc()
         if doc:
@@ -683,32 +704,12 @@ class MainWindow(QMainWindow):
         deg_map = {"90° clockwise": 90, "180°": 180, "90° counter-clockwise": 270}
         degrees = deg_map[combo_deg.currentText()]
 
-        # Save current state for undo. fitz.Document wraps a SWIG/C object and
-        # cannot be copy.deepcopy()'d (TypeError: cannot pickle SwigPyObject),
-        # so snapshot it by serializing to bytes and reopening independently.
-        before_state = fitz.open(stream=doc.tobytes(), filetype="pdf")
+        self._apply_inplace_edit(
+            "rotate_pages", {"page_indices": [], "degrees": degrees},
+            f"Rotate {degrees} degrees",
+        )
+        return
 
-        # Apply rotation to in-memory doc
-        tool = registry.get("rotate_pages")
-        modified = tool.apply_to_doc(doc, {"page_indices": [], "degrees": degrees})
-
-        # Create undo command
-        from pdf_forge.ui.undo_stack import DocCommand
-        class RotateCommand(DocCommand):
-            def execute(self, d):
-                return d
-            def undo(self, d):
-                return before_state
-            def description(self):
-                return f"Rotate {degrees}°"
-
-        tab = self._current_tab()
-        if tab and hasattr(tab, '_undo_stack'):
-            tab._undo_stack.push(RotateCommand(), before_state)
-        self._viewer.reload_from_memory()
-        self._mark_dirty()
-        self._update_undo_redo_buttons()
-        self._status_bar.showMessage(f"Rotated {degrees}°")
 
     def _run_delete_pages(self) -> None:
         input_path = self._current_input_path()
@@ -738,6 +739,9 @@ class MainWindow(QMainWindow):
         indices = self._parse_page_spec(edit.text(), tab.handle.page_count)
         if indices is None:
             QMessageBox.warning(self, "Delete Pages", "Invalid page specification.")
+            return
+
+        if self._apply_inplace_edit("delete_pages", {"page_indices": indices}, "Delete Pages"):
             return
 
         out_path, _ = QFileDialog.getSaveFileName(
@@ -786,6 +790,9 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Extract Pages", "Invalid page specification.")
             return
 
+        if self._apply_inplace_edit("extract_pages", {"page_indices": indices}, "Extract Pages"):
+            return
+
         out_path, _ = QFileDialog.getSaveFileName(
             self, "Save Extracted Pages",
             self._suggest_output(input_path, "_extracted"),
@@ -808,6 +815,8 @@ class MainWindow(QMainWindow):
         input_path = self._current_input_path()
         if not input_path:
             QMessageBox.information(self, "Reverse Pages", "Open a PDF first.")
+            return
+        if self._apply_inplace_edit("reverse_pages", {}, "Reverse Pages"):
             return
         out_path, _ = QFileDialog.getSaveFileName(
             self, "Save Reversed PDF",
@@ -845,6 +854,11 @@ class MainWindow(QMainWindow):
         if not dlg.exec():
             return
 
+        if self._apply_inplace_edit(
+            "add_blank_page", {"position": spin.value() - 1}, "Add Blank Page"
+        ):
+            return
+
         out_path, _ = QFileDialog.getSaveFileName(
             self, "Save PDF",
             self._suggest_output(input_path, "_blank"), "PDF Files (*.pdf)"
@@ -862,6 +876,8 @@ class MainWindow(QMainWindow):
         input_path = self._current_input_path()
         if not input_path:
             QMessageBox.information(self, "Remove Blank Pages", "Open a PDF first.")
+            return
+        if self._apply_inplace_edit("remove_blank_pages", {}, "Remove Blank Pages"):
             return
         out_path, _ = QFileDialog.getSaveFileName(
             self, "Save PDF",
@@ -954,6 +970,10 @@ class MainWindow(QMainWindow):
             self._status_bar.showMessage("Page Organizer — drag pages to reorder")
 
     def _organizer_apply(self, tab: "DocumentTab", order: list[int]) -> None:
+        if tab is self._current_tab() and self._apply_inplace_edit(
+            "reorder_pages", {"page_order": order}, "Reorder Pages"
+        ):
+            return
         out_path, _ = QFileDialog.getSaveFileName(
             self, "Save Reordered PDF",
             self._suggest_output(tab.handle.path, "_reordered"),
@@ -1184,10 +1204,12 @@ class MainWindow(QMainWindow):
         dlg = WatermarkDialog(parent=self)
         if not dlg.exec():
             return
+        params = dlg.get_params()
+        if self._apply_inplace_edit("watermark", params, "Watermark"):
+            return
         out = self._save_as("Save Watermarked PDF", input_path, "_watermarked")
         if not out:
             return
-        params = dlg.get_params()
         params.update({"input_path": input_path, "output_path": out})
         tool = registry.get("watermark")
         self._job_queue.submit(tool.create_job(params))
@@ -1201,10 +1223,12 @@ class MainWindow(QMainWindow):
         dlg = PageNumbersDialog(total_pages=total, parent=self)
         if not dlg.exec():
             return
+        params = dlg.get_params()
+        if self._apply_inplace_edit("add_page_numbers", params, "Add Page Numbers"):
+            return
         out = self._save_as("Save PDF with Page Numbers", input_path, "_numbered")
         if not out:
             return
-        params = dlg.get_params()
         params.update({"input_path": input_path, "output_path": out})
         tool = registry.get("add_page_numbers")
         self._job_queue.submit(tool.create_job(params))
@@ -1216,10 +1240,12 @@ class MainWindow(QMainWindow):
         dlg = BatesDialog(parent=self)
         if not dlg.exec():
             return
+        params = dlg.get_params()
+        if self._apply_inplace_edit("bates_number", params, "Add Bates Numbers"):
+            return
         out = self._save_as("Save Bates-Numbered PDF", input_path, "_bates")
         if not out:
             return
-        params = dlg.get_params()
         params.update({"input_path": input_path, "output_path": out})
         tool = registry.get("bates_number")
         self._job_queue.submit(tool.create_job(params))
@@ -1231,10 +1257,12 @@ class MainWindow(QMainWindow):
         dlg = HeaderFooterDialog(parent=self)
         if not dlg.exec():
             return
+        params = dlg.get_params()
+        if self._apply_inplace_edit("header_footer", params, "Add Header / Footer"):
+            return
         out = self._save_as("Save PDF with Header/Footer", input_path, "_hf")
         if not out:
             return
-        params = dlg.get_params()
         params.update({"input_path": input_path, "output_path": out})
         tool = registry.get("header_footer")
         self._job_queue.submit(tool.create_job(params))
@@ -1251,9 +1279,6 @@ class MainWindow(QMainWindow):
         dlg = CropDialog(page_width=pw, page_height=ph, parent=self)
         if not dlg.exec():
             return
-        out = self._save_as("Save Cropped PDF", input_path, "_cropped")
-        if not out:
-            return
         p = dlg.get_params()
         # Build optional pages list from pages_mode
         pages = None
@@ -1263,6 +1288,15 @@ class MainWindow(QMainWindow):
                 pages = [i for i in range(total) if (i + 1) % 2 == 0]
             elif p["pages_mode"] == "odd":
                 pages = [i for i in range(total) if (i + 1) % 2 == 1]
+        params = {
+            "margin_top": p["top"], "margin_bottom": p["bottom"],
+            "margin_left": p["left"], "margin_right": p["right"], "pages": pages,
+        }
+        if self._apply_inplace_edit("crop_pdf", params, "Crop Pages"):
+            return
+        out = self._save_as("Save Cropped PDF", input_path, "_cropped")
+        if not out:
+            return
         tool = registry.get("crop_pdf")
         self._job_queue.submit(tool.create_job({
             "input_path":    input_path,
@@ -1281,10 +1315,16 @@ class MainWindow(QMainWindow):
         dlg = RedactDialog(parent=self)
         if not dlg.exec():
             return
+        p = dlg.get_params()
+        params = {
+            "search_terms": [t.strip() for t in p["search_term"].splitlines() if t.strip()],
+            "whole_word": p["whole_word"], "case_sensitive": p["case_sensitive"],
+        }
+        if self._apply_inplace_edit("redact", params, "Redact"):
+            return
         out = self._save_as("Save Redacted PDF", input_path, "_redacted")
         if not out:
             return
-        p = dlg.get_params()
         tool = registry.get("redact")
         self._job_queue.submit(tool.create_job({
             "input_path":   input_path,
@@ -1301,10 +1341,13 @@ class MainWindow(QMainWindow):
         dlg = EditTextDialog(parent=self)
         if not dlg.exec():
             return
+        p = dlg.get_params()
+        params = {"find_text": p["find_text"], "replace_text": p["replace_text"], "case_sensitive": p["case_sensitive"]}
+        if self._apply_inplace_edit("edit_text", params, "Edit Text"):
+            return
         out = self._save_as("Save Edited PDF", input_path, "_edited")
         if not out:
             return
-        p = dlg.get_params()
         tool = registry.get("edit_text")
         self._job_queue.submit(tool.create_job({
             "input_path":     input_path,
@@ -1321,10 +1364,12 @@ class MainWindow(QMainWindow):
         dlg = FlattenDialog(parent=self)
         if not dlg.exec():
             return
+        params = dlg.get_params()
+        if self._apply_inplace_edit("flatten_pdf", params, "Flatten PDF"):
+            return
         out = self._save_as("Save Flattened PDF", input_path, "_flat")
         if not out:
             return
-        params = dlg.get_params()
         params.update({"input_path": input_path, "output_path": out})
         tool = registry.get("flatten_pdf")
         self._job_queue.submit(tool.create_job(params))
@@ -1336,10 +1381,12 @@ class MainWindow(QMainWindow):
         dlg = RemoveAnnotationsDialog(parent=self)
         if not dlg.exec():
             return
+        params = dlg.get_params()
+        if self._apply_inplace_edit("remove_annotations", params, "Remove Annotations"):
+            return
         out = self._save_as("Save PDF", input_path, "_clean")
         if not out:
             return
-        params = dlg.get_params()
         params.update({"input_path": input_path, "output_path": out})
         tool = registry.get("remove_annotations")
         self._job_queue.submit(tool.create_job(params))
@@ -1554,6 +1601,8 @@ class MainWindow(QMainWindow):
         input_path = self._require_open("Repair PDF")
         if not input_path:
             return
+        if self._apply_inplace_edit("repair_pdf", {}, "Repair PDF"):
+            return
         out = self._save_as("Save Repaired PDF", input_path, "_repaired")
         if not out:
             return
@@ -1586,11 +1635,16 @@ class MainWindow(QMainWindow):
             self._status_bar.showMessage("Nothing to undo")
             return
 
-        result = tab._undo_stack.undo()
+        doc = self._viewer.current_doc()
+        result = tab._undo_stack.undo(doc.tobytes()) if doc else None
         if result:
             cmd, before_state = result
-            doc = self._viewer.current_doc()
             if doc:
+                restored = fitz.open(stream=before_state, filetype="pdf")
+                if doc.page_count:
+                    doc.delete_pages(0, doc.page_count - 1)
+                doc.insert_pdf(restored)
+                restored.close()
                 self._viewer.set_dirty(True)
                 self._viewer.reload_from_memory()
                 self._status_bar.showMessage(f"Undone: {cmd.description()}")
@@ -1605,11 +1659,16 @@ class MainWindow(QMainWindow):
             self._status_bar.showMessage("Nothing to redo")
             return
 
-        result = tab._undo_stack.redo()
+        doc = self._viewer.current_doc()
+        result = tab._undo_stack.redo(doc.tobytes()) if doc else None
         if result:
             cmd, before_state = result
-            doc = self._viewer.current_doc()
             if doc:
+                restored = fitz.open(stream=before_state, filetype="pdf")
+                if doc.page_count:
+                    doc.delete_pages(0, doc.page_count - 1)
+                doc.insert_pdf(restored)
+                restored.close()
                 self._viewer.set_dirty(True)
                 self._viewer.reload_from_memory()
                 self._status_bar.showMessage(f"Redone: {cmd.description()}")

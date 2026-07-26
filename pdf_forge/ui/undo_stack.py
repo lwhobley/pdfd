@@ -1,7 +1,6 @@
 """Undo/redo system for in-place PDF editing via command pattern."""
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import Any
 import fitz
 import logging
 
@@ -17,7 +16,7 @@ class DocCommand(ABC):
         pass
 
     @abstractmethod
-    def undo(self, doc: fitz.Document) -> fitz.Document:
+    def undo(self, doc: fitz.Document) -> fitz.Document | bytes:
         """Undo the command. Returns the document state before execute()."""
         pass
 
@@ -27,22 +26,38 @@ class DocCommand(ABC):
         pass
 
 
+class SnapshotCommand(DocCommand):
+    """Generic undo command restoring a serialized pre-edit document."""
+
+    def __init__(self, description: str, before_bytes: bytes) -> None:
+        self._description = description
+        self._before_bytes = before_bytes
+
+    def execute(self, doc: fitz.Document) -> fitz.Document:
+        return doc
+
+    def undo(self, doc: fitz.Document) -> bytes:
+        return self._before_bytes
+
+    def description(self) -> str:
+        return self._description
+
+
 class UndoStack:
     """Manages undo/redo for in-place PDF editing."""
 
     def __init__(self, max_undo_levels: int = 20) -> None:
-        self._undo_stack: list[tuple[DocCommand, fitz.Document]] = []
-        self._redo_stack: list[tuple[DocCommand, fitz.Document]] = []
+        self._undo_stack: list[tuple[DocCommand, bytes]] = []
+        self._redo_stack: list[tuple[DocCommand, bytes]] = []
         self._max_levels = max_undo_levels
 
-    def push(self, command: DocCommand, before_state: fitz.Document) -> None:
-        """Execute a command and push it onto the undo stack.
+    def push(self, command: DocCommand, before_state: bytes) -> None:
+        """Record an already-applied command and its pre-edit byte snapshot.
 
         Args:
             command: The command to execute
-            before_state: The document state before execution (for undo)
+            before_state: The document bytes before execution (for undo)
 
-        Saves a snapshot of before_state, so the doc can be restored.
         Clears the redo stack (standard undo/redo behavior).
         """
         self._undo_stack.append((command, before_state))
@@ -53,30 +68,30 @@ class UndoStack:
             self._undo_stack.pop(0)
             log.debug("Undo stack full; dropped oldest command")
 
-    def undo(self) -> tuple[DocCommand, fitz.Document] | None:
-        """Pop the last command and push it to redo stack.
+    def undo(self, current_state: bytes) -> tuple[DocCommand, bytes] | None:
+        """Pop the last command and save the outgoing state for redo.
 
         Returns:
-            (command, before_state) or None if nothing to undo
+            (command, bytes to restore) or None if nothing to undo
         """
         if not self._undo_stack:
             return None
 
         command, before_state = self._undo_stack.pop()
-        self._redo_stack.append((command, before_state))
+        self._redo_stack.append((command, current_state))
         return (command, before_state)
 
-    def redo(self) -> tuple[DocCommand, fitz.Document] | None:
-        """Pop from redo stack and push back to undo stack.
+    def redo(self, current_state: bytes) -> tuple[DocCommand, bytes] | None:
+        """Pop from redo and save the outgoing state for a later undo.
 
         Returns:
-            (command, before_state) or None if nothing to redo
+            (command, bytes to restore) or None if nothing to redo
         """
         if not self._redo_stack:
             return None
 
         command, before_state = self._redo_stack.pop()
-        self._undo_stack.append((command, before_state))
+        self._undo_stack.append((command, current_state))
         return (command, before_state)
 
     def can_undo(self) -> bool:
