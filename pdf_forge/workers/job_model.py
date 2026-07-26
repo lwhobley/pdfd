@@ -18,6 +18,7 @@ class JobStatus(Enum):
 class JobResult:
     output_paths: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
+    modified_doc: Any = None  # fitz.Document for in-place edits; None for file-based
 
 
 class Job:

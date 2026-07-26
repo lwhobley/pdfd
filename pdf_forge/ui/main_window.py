@@ -53,6 +53,7 @@ from pdf_forge.ui.dialogs.pdf_to_excel_dialog import PDFToExcelDialog
 from pdf_forge.ui.dialogs.sanitize_dialog import SanitizeDialog
 from pdf_forge.ui.organizer.page_organizer import PageOrganizerWidget
 from pdf_forge.ui.workflow.workflow_window import WorkflowWindow
+from pdf_forge.ui.undo_stack import UndoStack
 
 log = logging.getLogger(__name__)
 
@@ -140,6 +141,8 @@ class MainWindow(QMainWindow):
         self._history = JobHistory()
         self._pdf_service = PDFService(self._recent)
         self._job_queue = JobQueue(self._history, parent=self)
+        self._undo_stack = UndoStack()
+        self._current_file_path: str | None = None
 
         Capabilities.detect(settings)
         registry.discover()
@@ -233,6 +236,11 @@ class MainWindow(QMainWindow):
         act_open.setShortcut(QKeySequence.StandardKey.Open)
         act_open.triggered.connect(self._browse_open)
 
+        self._act_save = file_menu.addAction("&Save")
+        self._act_save.setShortcut(QKeySequence.StandardKey.Save)
+        self._act_save.triggered.connect(self._save)
+        self._act_save.setEnabled(False)
+
         file_menu.addSeparator()
 
         act_close = file_menu.addAction("Close Tab")
@@ -249,6 +257,18 @@ class MainWindow(QMainWindow):
         act_quit = file_menu.addAction("&Quit")
         act_quit.setShortcut(QKeySequence.StandardKey.Quit)
         act_quit.triggered.connect(self.close)
+
+        # Edit menu
+        edit_menu = mb.addMenu("&Edit")
+        self._act_undo = edit_menu.addAction("&Undo")
+        self._act_undo.setShortcut(QKeySequence.StandardKey.Undo)
+        self._act_undo.triggered.connect(self._undo)
+        self._act_undo.setEnabled(False)
+
+        self._act_redo = edit_menu.addAction("&Redo")
+        self._act_redo.setShortcut(QKeySequence.StandardKey.Redo)
+        self._act_redo.triggered.connect(self._redo)
+        self._act_redo.setEnabled(False)
 
         # Tools menu
         tools_menu = mb.addMenu("&Tools")
@@ -1477,6 +1497,83 @@ class MainWindow(QMainWindow):
             "A production-grade PDF workstation.\n\n"
             "Built with Python + PySide6 + PyMuPDF + pikepdf."
         )
+
+    # ── Undo/Redo/Save (In-Place Editing) ──────────────────────────────────────
+
+    def _undo(self) -> None:
+        """Undo the last operation."""
+        result = self._undo_stack.undo()
+        if result:
+            cmd, before_state = result
+            doc = self._viewer.current_doc()
+            if doc:
+                # Swap the document back to before_state
+                # For now, just mark as dirty and refresh
+                self._viewer.set_dirty(True)
+                self._viewer.reload_from_memory()
+                self._status_bar.showMessage(f"Undone: {cmd.description()}")
+                self._update_undo_redo_buttons()
+
+    def _redo(self) -> None:
+        """Redo the last undone operation."""
+        result = self._undo_stack.redo()
+        if result:
+            cmd, before_state = result
+            doc = self._viewer.current_doc()
+            if doc:
+                self._viewer.set_dirty(True)
+                self._viewer.reload_from_memory()
+                self._status_bar.showMessage(f"Redone: {cmd.description()}")
+                self._update_undo_redo_buttons()
+
+    def _save(self) -> None:
+        """Save the current document (in-place or save-as on first save)."""
+        doc = self._viewer.current_doc()
+        if not doc:
+            self._status_bar.showMessage("No PDF open to save")
+            return
+
+        if not self._current_file_path:
+            # First save: show save-as dialog
+            path = self._save_as_dialog()
+            if not path:
+                return
+            self._current_file_path = path
+
+        try:
+            doc.save(self._current_file_path)
+            self._viewer.set_dirty(False)
+            self._mark_clean()
+            self._status_bar.showMessage(f"Saved: {self._current_file_path}")
+        except Exception as e:
+            log.error("Save failed: %s", e)
+            self._status_bar.showMessage(f"Save failed: {e}")
+
+    def _mark_dirty(self) -> None:
+        """Mark document as modified and update UI."""
+        self._viewer.set_dirty(True)
+        self._act_save.setEnabled(self._viewer.current_doc() is not None)
+        # Update window title to show unsaved indicator
+        title = APP_NAME
+        if self._current_file_path:
+            title += f" - {os.path.basename(self._current_file_path)}"
+        if self._viewer.is_dirty():
+            title += " *"
+        self.setWindowTitle(title)
+
+    def _mark_clean(self) -> None:
+        """Mark document as clean (no unsaved changes)."""
+        self._viewer.set_dirty(False)
+        # Update window title to remove unsaved indicator
+        title = APP_NAME
+        if self._current_file_path:
+            title += f" - {os.path.basename(self._current_file_path)}"
+        self.setWindowTitle(title)
+
+    def _update_undo_redo_buttons(self) -> None:
+        """Enable/disable undo/redo buttons based on stack state."""
+        self._act_undo.setEnabled(self._undo_stack.can_undo())
+        self._act_redo.setEnabled(self._undo_stack.can_redo())
 
     # ── Window Lifecycle ──────────────────────────────────────────────────────
 

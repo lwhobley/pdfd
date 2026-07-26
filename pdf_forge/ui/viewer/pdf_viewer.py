@@ -47,6 +47,8 @@ class PDFViewer(QWidget):
         self._adapter: PyMuPDFAdapter | None = None
         self._current_page: int = 0
         self._zoom: float = 1.0
+        self._is_dirty: bool = False
+        self._source_file_path: str | None = None
         self._pool = QThreadPool.globalInstance()
         self._pool.setMaxThreadCount(max(2, self._pool.maxThreadCount()))
         self._pending_render: int = -1
@@ -75,10 +77,14 @@ class PDFViewer(QWidget):
         self._adapter = adapter
         self._current_page = 0
         self._zoom = 1.0
+        self._is_dirty = False
+        self._source_file_path = adapter.path
         self._render_current()
 
     def close_document(self) -> None:
         self._adapter = None
+        self._is_dirty = False
+        self._source_file_path = None
         self._page_label.setPixmap(QPixmap())
         self._page_label.setText("Open a PDF to start")
         self._page_label.setStyleSheet("color: #585b70; font-size: 18px;")
@@ -139,6 +145,32 @@ class PDFViewer(QWidget):
     @property
     def page_count(self) -> int:
         return self._adapter.page_count if self._adapter else 0
+
+    # ── In-place editing support ───────────────────────────────────────────────
+
+    def current_doc(self) -> object | None:
+        """Return the underlying fitz.Document, or None if no PDF open."""
+        return self._adapter.doc if self._adapter else None
+
+    def is_dirty(self) -> bool:
+        """Check if the document has unsaved changes."""
+        return self._is_dirty
+
+    def set_dirty(self, dirty: bool) -> None:
+        """Mark the document as modified or clean."""
+        self._is_dirty = dirty
+
+    def source_file_path(self) -> str | None:
+        """Return the path of the currently open PDF file."""
+        return self._source_file_path
+
+    def reload_from_memory(self) -> None:
+        """Refresh the display after the in-memory document was modified.
+
+        Call this after applying a tool to update the rendered view.
+        """
+        if self._adapter:
+            self._render_current()
 
     # ── Rendering ─────────────────────────────────────────────────────────────
 

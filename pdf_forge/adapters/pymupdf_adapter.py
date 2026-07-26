@@ -26,6 +26,10 @@ class PyMuPDFAdapter:
     def path(self) -> str:
         return self._path
 
+    @property
+    def doc(self) -> fitz.Document:
+        return self._doc
+
     def render_page(self, page_num: int, zoom: float = 1.0) -> QPixmap:
         """Render a page to a QPixmap at the given zoom level."""
         page = self._doc[page_num]
