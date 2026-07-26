@@ -106,3 +106,38 @@ class PageNumbersTool(BaseTool):
             color=params.get("color", (0.0, 0.0, 0.0)),
             skip_first=params.get("skip_first", False),
         )
+
+    def apply_to_doc(self, doc: fitz.Document, params: dict[str, Any]) -> fitz.Document:
+        """Add page numbers to pages in-place."""
+        start_number = params.get("start_number", 1)
+        prefix = params.get("prefix", "")
+        suffix = params.get("suffix", "")
+        include_total = params.get("include_total", False)
+        position = params.get("position", "bottom-center")
+        font_size = params.get("font_size", 10)
+        color = params.get("color", (0.0, 0.0, 0.0))
+        skip_first = params.get("skip_first", False)
+
+        total = len(doc)
+        rel_x, rel_y = _POSITION_MAP.get(position, (0.5, 0.96))
+
+        for i in range(total):
+            if skip_first and i == 0:
+                continue
+
+            page = doc[i]
+            n = i + start_number
+            if include_total:
+                label = f"{prefix}{n} / {total + start_number - 1}{suffix}"
+            else:
+                label = f"{prefix}{n}{suffix}"
+
+            w = page.rect.width
+            h = page.rect.height
+            tw = fitz.get_text_length(label, fontsize=font_size)
+            x = w * rel_x - tw / 2
+            y = h * rel_y
+
+            page.insert_text(fitz.Point(x, y), label, fontsize=font_size, color=color)
+
+        return doc

@@ -89,3 +89,30 @@ class WatermarkTool(BaseTool):
             color=params.get("color", (0.5, 0.5, 0.5)),
             pages=params.get("pages"),
         )
+
+    def apply_to_doc(self, doc: fitz.Document, params: dict[str, Any]) -> fitz.Document:
+        """Add watermark text to pages in-place."""
+        text = params.get("text", "CONFIDENTIAL")
+        font_size = params.get("font_size", 60)
+        opacity = params.get("opacity", 0.15)
+        angle = params.get("angle", 45.0)
+        color = params.get("color", (0.5, 0.5, 0.5))
+        pages = params.get("pages")
+
+        target = pages if pages is not None else list(range(len(doc)))
+        for pn in target:
+            if 0 <= pn < len(doc):
+                page = doc[pn]
+                rect = page.rect
+                center = fitz.Point(rect.width / 2, rect.height / 2)
+
+                tw = fitz.get_text_length(text, fontsize=font_size)
+                writer = fitz.TextWriter(rect, opacity=opacity, color=color)
+                rad = math.radians(angle)
+                start = fitz.Point(
+                    center.x - math.cos(rad) * tw / 2,
+                    center.y + math.sin(rad) * tw / 2,
+                )
+                writer.append(start, text, fontsize=font_size)
+                writer.write_text(page, morph=(center, fitz.Matrix(angle)))
+        return doc

@@ -89,3 +89,24 @@ class RedactTool(BaseTool):
             whole_word=params.get("whole_word", False),
             case_sensitive=params.get("case_sensitive", False),
         )
+
+    def apply_to_doc(self, doc: fitz.Document, params: dict[str, Any]) -> fitz.Document:
+        """Search and redact terms in-place."""
+        search_terms = params.get("search_terms", [])
+        fill_color = tuple(params.get("fill_color", (0.0, 0.0, 0.0)))
+        whole_word = params.get("whole_word", False)
+        case_sensitive = params.get("case_sensitive", False)
+
+        for page in doc:
+            for term in search_terms:
+                hits = find_text_rects(
+                    page, term,
+                    case_sensitive=case_sensitive,
+                    whole_word=whole_word,
+                )
+                for rect in hits:
+                    page.add_redact_annot(rect, fill=fill_color)
+
+            page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
+
+        return doc

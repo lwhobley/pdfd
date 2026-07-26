@@ -105,3 +105,29 @@ class EditTextTool(BaseTool):
             replace_text=params.get("replace_text", ""),
             case_sensitive=params.get("case_sensitive", True),
         )
+
+    def apply_to_doc(self, doc: fitz.Document, params: dict[str, Any]) -> fitz.Document:
+        """Find and replace text in pages in-place."""
+        find_text = params["find_text"]
+        replace_text = params.get("replace_text", "")
+        case_sensitive = params.get("case_sensitive", True)
+
+        for page in doc:
+            rects = find_text_rects(page, find_text, case_sensitive=case_sensitive)
+            if not rects:
+                continue
+
+            # Collect font sizes before redaction
+            replacements: list[tuple[fitz.Point, float]] = []
+            for rect in rects:
+                font_size = _font_size_at(page, rect)
+                page.add_redact_annot(rect, fill=(1.0, 1.0, 1.0))
+                replacements.append((fitz.Point(rect.x0, rect.y1), font_size))
+
+            page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
+
+            if replace_text:
+                for pt, fs in replacements:
+                    page.insert_text(pt, replace_text, fontsize=fs, color=(0.0, 0.0, 0.0))
+
+        return doc

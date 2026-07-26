@@ -83,3 +83,26 @@ class CropTool(BaseTool):
             margin_left=float(params.get("margin_left", 0)),
             pages=params.get("pages"),
         )
+
+    def apply_to_doc(self, doc: fitz.Document, params: dict[str, Any]) -> fitz.Document:
+        """Set crop margins on pages in-place."""
+        margin_top = float(params.get("margin_top", 0))
+        margin_right = float(params.get("margin_right", 0))
+        margin_bottom = float(params.get("margin_bottom", 0))
+        margin_left = float(params.get("margin_left", 0))
+        pages = params.get("pages")
+
+        target = pages if pages is not None else list(range(len(doc)))
+        for pn in target:
+            if 0 <= pn < len(doc):
+                page = doc[pn]
+                mb = page.mediabox
+                crop = fitz.Rect(
+                    mb.x0 + margin_left,
+                    mb.y0 + margin_top,
+                    mb.x1 - margin_right,
+                    mb.y1 - margin_bottom,
+                )
+                crop = crop & mb
+                page.set_cropbox(crop)
+        return doc

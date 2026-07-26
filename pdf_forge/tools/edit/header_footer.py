@@ -120,3 +120,62 @@ class HeaderFooterTool(BaseTool):
             color=params.get("color", (0.3, 0.3, 0.3)),
             skip_first=params.get("skip_first", False),
         )
+
+    def apply_to_doc(self, doc: fitz.Document, params: dict[str, Any]) -> fitz.Document:
+        """Add header/footer text to pages in-place."""
+        import os
+        from datetime import date
+
+        header_left = params.get("header_left", "")
+        header_center = params.get("header_center", "")
+        header_right = params.get("header_right", "")
+        footer_left = params.get("footer_left", "")
+        footer_center = params.get("footer_center", "")
+        footer_right = params.get("footer_right", "")
+        font_size = params.get("font_size", 9)
+        color = params.get("color", (0.3, 0.3, 0.3))
+        skip_first = params.get("skip_first", False)
+
+        total = len(doc)
+        filename = "document"  # No input_path in apply_to_doc context
+        today = date.today().strftime("%Y-%m-%d")
+
+        def _resolve(template: str, page_num: int) -> str:
+            return (
+                template
+                .replace("{page}", str(page_num))
+                .replace("{total}", str(total))
+                .replace("{filename}", filename)
+                .replace("{date}", today)
+            )
+
+        for i in range(total):
+            if skip_first and i == 0:
+                continue
+
+            page = doc[i]
+            w = page.rect.width
+            h = page.rect.height
+            n = i + 1
+            fs = font_size
+
+            def _insert(text: str, x: float, y: float, align_right: bool = False) -> None:
+                if not text:
+                    return
+                t = _resolve(text, n)
+                tw = fitz.get_text_length(t, fontsize=fs)
+                px = (x - tw) if align_right else x
+                page.insert_text(fitz.Point(px, y), t, fontsize=fs, color=color)
+
+            header_y = _MARGIN
+            footer_y = h - _MARGIN + fs
+
+            _insert(header_left, _MARGIN, header_y)
+            _insert(header_center, w / 2 - fitz.get_text_length(_resolve(header_center, n), fontsize=fs) / 2, header_y)
+            _insert(header_right, w - _MARGIN, header_y, align_right=True)
+
+            _insert(footer_left, _MARGIN, footer_y)
+            _insert(footer_center, w / 2 - fitz.get_text_length(_resolve(footer_center, n), fontsize=fs) / 2, footer_y)
+            _insert(footer_right, w - _MARGIN, footer_y, align_right=True)
+
+        return doc

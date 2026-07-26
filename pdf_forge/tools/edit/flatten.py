@@ -68,3 +68,25 @@ class FlattenTool(BaseTool):
             output_path=params["output_path"],
             render_dpi=params.get("render_dpi", 150),
         )
+
+    def apply_to_doc(self, doc: fitz.Document, params: dict[str, Any]) -> fitz.Document:
+        """Flatten annotations in-place by rasterizing to new doc, then swapping pages."""
+        render_dpi = params.get("render_dpi", 150)
+        zoom = render_dpi / 72.0
+        mat = fitz.Matrix(zoom, zoom)
+
+        # Create temporary doc for rasterized pages
+        dst = fitz.open()
+        for page in doc:
+            pix = page.get_pixmap(matrix=mat, alpha=False)
+            new_page = dst.new_page(width=page.rect.width, height=page.rect.height)
+            new_page.insert_image(new_page.rect, pixmap=pix)
+
+        # Swap pages: delete all original pages and replace with flattened
+        for i in range(len(doc) - 1, -1, -1):
+            doc.delete_page(i)
+        for page in dst:
+            doc.insert_pdf(dst, from_page=page.number, to_page=page.number)
+
+        dst.close()
+        return doc

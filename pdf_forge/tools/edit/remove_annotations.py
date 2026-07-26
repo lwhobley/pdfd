@@ -77,3 +77,22 @@ class RemoveAnnotationsTool(BaseTool):
             annotation_types=params.get("annotation_types"),
             pages=params.get("pages"),
         )
+
+    def apply_to_doc(self, doc: fitz.Document, params: dict[str, Any]) -> fitz.Document:
+        """Remove annotations in-place."""
+        annotation_types = params.get("annotation_types")
+        pages = params.get("pages")
+
+        target = pages if pages is not None else list(range(len(doc)))
+        for pn in target:
+            if 0 <= pn < len(doc):
+                page = doc[pn]
+                annots_to_delete = []
+                for annot in page.annots() or []:
+                    if annotation_types is None:
+                        annots_to_delete.append(annot)
+                    elif annot.type[1] in annotation_types:
+                        annots_to_delete.append(annot)
+                for annot in annots_to_delete:
+                    page.delete_annot(annot)
+        return doc

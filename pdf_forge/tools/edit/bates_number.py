@@ -99,3 +99,33 @@ class BatesNumberTool(BaseTool):
             position=params.get("position", "bottom-right"),
             font_size=params.get("font_size", 9),
         )
+
+    def apply_to_doc(self, doc: fitz.Document, params: dict[str, Any]) -> fitz.Document:
+        """Add Bates numbers to pages in-place."""
+        from pdf_forge.tools.edit.page_numbers import _POSITION_MAP
+
+        prefix = params.get("prefix", "")
+        suffix = params.get("suffix", "")
+        start_number = params.get("start_number", 1)
+        pad_width = params.get("pad_width", 6)
+        position = params.get("position", "bottom-right")
+        font_size = params.get("font_size", 9)
+
+        total = len(doc)
+        rel_x, rel_y = _POSITION_MAP.get(position, (0.95, 0.96))
+
+        for i in range(total):
+            page = doc[i]
+            n = start_number + i
+            label = f"{prefix}{str(n).zfill(pad_width)}{suffix}"
+            w = page.rect.width
+            h = page.rect.height
+            tw = fitz.get_text_length(label, fontsize=font_size)
+
+            rel_x_val, _ = _POSITION_MAP.get(position, (0.95, 0.96))
+            x = w * rel_x_val - (tw if rel_x_val > 0.8 else tw / 2)
+            y = h * rel_y
+
+            page.insert_text(fitz.Point(x, y), label, fontsize=font_size, color=(0.0, 0.0, 0.0))
+
+        return doc
