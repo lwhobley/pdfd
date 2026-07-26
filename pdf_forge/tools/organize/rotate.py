@@ -1,6 +1,7 @@
 """Rotate pages tool."""
 from __future__ import annotations
 from typing import Any
+import fitz
 
 from pdf_forge.tools.base import BaseTool, ToolMeta
 from pdf_forge.workers.job_model import Job, JobResult
@@ -56,3 +57,16 @@ class RotateTool(BaseTool):
             page_indices=params.get("page_indices", []),
             degrees=params.get("degrees", 90),
         )
+
+    def apply_to_doc(self, doc: fitz.Document, params: dict[str, Any]) -> fitz.Document:
+        """Apply rotation directly to an open document (in-place editing)."""
+        page_indices = params.get("page_indices", [])
+        if not page_indices:
+            page_indices = list(range(len(doc)))
+
+        degrees = params.get("degrees", 90)
+        for page_num in page_indices:
+            if 0 <= page_num < len(doc):
+                doc[page_num].set_rotation(degrees)
+
+        return doc

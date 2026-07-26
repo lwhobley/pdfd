@@ -596,6 +596,13 @@ class MainWindow(QMainWindow):
             self._status_bar.showMessage(f"Split job submitted [{job.job_id}]")
 
     def _run_rotate(self) -> None:
+        doc = self._viewer.current_doc()
+        if doc:
+            # In-place editing mode
+            self._run_rotate_inplace(doc)
+            return
+
+        # Legacy: file-based mode (no doc open)
         input_path = self._current_input_path()
         if not input_path:
             QMessageBox.information(self, "Rotate Pages", "Open a PDF first.")
@@ -636,6 +643,52 @@ class MainWindow(QMainWindow):
             "degrees": degrees,
         })
         self._job_queue.submit(job)
+
+    def _run_rotate_inplace(self, doc) -> None:
+        """Rotate pages in the open document (in-place mode)."""
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QComboBox, QDialogButtonBox, QFormLayout
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Rotate Pages")
+        layout = QVBoxLayout(dlg)
+        form = QFormLayout()
+        combo_deg = QComboBox()
+        combo_deg.addItems(["90° clockwise", "180°", "90° counter-clockwise"])
+        form.addRow("Rotation:", combo_deg)
+        layout.addLayout(form)
+        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        layout.addWidget(btns)
+
+        if not dlg.exec():
+            return
+
+        deg_map = {"90° clockwise": 90, "180°": 180, "90° counter-clockwise": 270}
+        degrees = deg_map[combo_deg.currentText()]
+
+        # Save current state for undo
+        import copy
+        before_state = copy.deepcopy(doc)
+
+        # Apply rotation to in-memory doc
+        tool = registry.get("rotate_pages")
+        modified = tool.apply_to_doc(doc, {"page_indices": [], "degrees": degrees})
+
+        # Create undo command
+        from pdf_forge.ui.undo_stack import DocCommand
+        class RotateCommand(DocCommand):
+            def execute(self, d):
+                return d
+            def undo(self, d):
+                return before_state
+            def description(self):
+                return f"Rotate {degrees}°"
+
+        self._undo_stack.push(RotateCommand(), before_state)
+        self._viewer.reload_from_memory()
+        self._mark_dirty()
+        self._update_undo_redo_buttons()
+        self._status_bar.showMessage(f"Rotated {degrees}°")
 
     def _run_delete_pages(self) -> None:
         input_path = self._current_input_path()
