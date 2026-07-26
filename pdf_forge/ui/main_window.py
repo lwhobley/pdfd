@@ -1623,14 +1623,31 @@ class MainWindow(QMainWindow):
             return
 
         if not self._current_file_path:
-            # First save: show save-as dialog
-            path = self._save_as_dialog()
-            if not path:
+            # First save: show save-as dialog, defaulting to the source path
+            default_path = self._viewer.source_file_path() or ""
+            out, _ = QFileDialog.getSaveFileName(
+                self, "Save PDF", default_path, "PDF Files (*.pdf)"
+            )
+            if not out:
                 return
-            self._current_file_path = path
+            self._current_file_path = out
 
         try:
-            doc.save(self._current_file_path)
+            # fitz keeps the file it was opened from locked/open, so writing
+            # a full rebuilt copy back to that exact path fails (and on
+            # Windows, even a temp-file-and-replace swap fails because the
+            # OS won't replace a file that's still held open). Saving back
+            # to the original path must go through an incremental save;
+            # saving to any other (save-as) path can use a normal full save.
+            same_as_source = doc.name and os.path.normcase(
+                os.path.normpath(self._current_file_path)
+            ) == os.path.normcase(os.path.normpath(doc.name))
+
+            if same_as_source:
+                doc.saveIncr()
+            else:
+                doc.save(self._current_file_path, deflate=True, garbage=4, clean=True)
+
             self._viewer.set_dirty(False)
             self._mark_clean()
             self._status_bar.showMessage(f"Saved: {self._current_file_path}")

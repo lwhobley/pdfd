@@ -107,7 +107,6 @@ class EncryptTool(BaseTool):
         )
 
 
-
 class DecryptTool(BaseTool):
     meta = ToolMeta(
         tool_id="decrypt_pdf",
